@@ -1,33 +1,95 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "libcoro.h"
+#include <time.h>
 
-/**
- * You can compile and run this code using the commands:
- *
- * $> gcc solution.c libcoro.c
- * $> ./a.out
- */
+#include "libcoro.h"
+#include "mergesort.h"
+
+struct IntArray {
+  int *data;
+  int length;
+};
+
+int read_integers_from_file(const char *filename, struct IntArray *result) {
+  FILE *file = fopen(filename, "r");  // Open the file for reading
+  if (file == NULL) {
+    perror("Error opening the file");
+    return 1;
+  }
+
+  int capacity = 10;
+  int size = 0;
+  int *integers = (int *)malloc(capacity * sizeof(int));
+
+  if (integers == NULL) {
+    fclose(file);
+    return 1;
+  }
+
+  int number;
+  while (fscanf(file, "%d", &number) == 1) {
+    integers[size++] = number;
+
+    if (size >= capacity) {
+      capacity *= 2;
+      int *temp = realloc(integers, capacity * sizeof(int));
+      if (temp == NULL) {
+        free(integers);
+        fclose(file);
+        return 1;
+      }
+      integers = temp;
+    }
+  }
+
+  if (ferror(file) != 0) {
+    fclose(file);
+    free(integers);
+    return 1;
+  }
+
+  result->data = integers;
+  result->length = size;
+
+  fclose(file);
+  return 0;
+}
+
+int write_integers_to_file(int *array, int len) {
+  FILE *file = fopen("result.txt", "w");
+  if (file == NULL) {
+    printf("Error opening the file");
+    return 1;
+  }
+
+  for (int i = 0; i < len; i++) {
+    fprintf(file, "%d ", array[i]);
+  }
+
+  fclose(file);
+
+  return 0;
+}
 
 struct my_context {
-	char *name;
-	/** ADD HERE YOUR OWN MEMBERS, SUCH AS FILE NAME, WORK TIME, ... */
+  char *filename;
+  struct IntArray *array;
+  /** ADD HERE YOUR OWN MEMBERS, SUCH AS FILE NAME, WORK TIME, ... */
 };
 
 static struct my_context *
-my_context_new(const char *name)
-{
-	struct my_context *ctx = malloc(sizeof(*ctx));
-	ctx->name = strdup(name);
-	return ctx;
+my_context_new(const char *name, struct IntArray *array) {
+  struct my_context *ctx = malloc(sizeof(*ctx));
+  ctx->filename = strdup(name);
+  ctx->array = array;
+  return ctx;
 }
 
 static void
-my_context_delete(struct my_context *ctx)
-{
-	free(ctx->name);
-	free(ctx);
+my_context_delete(struct my_context *ctx) {
+  free(ctx->filename);
+  free(ctx);
 }
 
 /**
@@ -35,83 +97,81 @@ my_context_delete(struct my_context *ctx)
  * the example. You can split your code into multiple functions, that usually
  * helps to keep the individual code blocks simple.
  */
-static void
-other_function(const char *name, int depth)
-{
-	printf("%s: entered function, depth = %d\n", name, depth);
-	coro_yield();
-	if (depth < 3)
-		other_function(name, depth + 1);
-}
+// static void
+// other_function(const char *name, int depth) {
+//   printf("%s: entered function, depth = %d\n", name, depth);
+//   coro_yield();
+//   if (depth < 3)
+//     other_function(name, depth + 1);
+// }
 
+int int_gt_comparator(const void *a, const void *b) {
+  return *(int *)a - *(int *)b;
+}
 /**
  * Coroutine body. This code is executed by all the coroutines. Here you
  * implement your solution, sort each individual file.
  */
 static int
-coroutine_func_f(void *context)
-{
-	/* IMPLEMENT SORTING OF INDIVIDUAL FILES HERE. */
+coroutine_func_f(void *context) {
+  //   struct coro *this = coro_this();
+  struct my_context *ctx = context;
 
-	struct coro *this = coro_this();
-	struct my_context *ctx = context;
-	char *name = ctx->name;
-	printf("Started coroutine %s\n", name);
-	printf("%s: switch count %lld\n", name, coro_switch_count(this));
-	printf("%s: yield\n", name);
-	coro_yield();
+  if (read_integers_from_file(ctx->filename, ctx->array) != 0) {
+    printf("Error reading integers from file %s", ctx->filename);
+    return 1;
+  }
+  yield_if_period_end();
 
-	printf("%s: switch count %lld\n", name, coro_switch_count(this));
-	printf("%s: yield\n", name);
-	coro_yield();
+  mergesort(ctx->array->data, ctx->array->length, sizeof(int), int_gt_comparator);
 
-	printf("%s: switch count %lld\n", name, coro_switch_count(this));
-	other_function(name, 1);
-	printf("%s: switch count after other function %lld\n", name,
-	       coro_switch_count(this));
-
-	my_context_delete(ctx);
-	/* This will be returned from coro_status(). */
-	return 0;
+  my_context_delete(ctx);
+  /* This will be returned from coro_status(). */
+  return 0;
 }
 
-int
-main(int argc, char **argv)
-{
-	/* Delete these suppressions when start using the args. */
-	(void)argc;
-	(void)argv;
-	/* Initialize our coroutine global cooperative scheduler. */
-	coro_sched_init();
-	/* Start several coroutines. */
-	for (int i = 0; i < 3; ++i) {
-		/*
-		 * The coroutines can take any 'void *' interpretation of which
-		 * depends on what you want. Here as an example I give them
-		 * some names.
-		 */
-		char name[16];
-		sprintf(name, "coro_%d", i);
-		/*
-		 * I have to copy the name. Otherwise all the coroutines would
-		 * have the same name when they finally start.
-		 */
-		coro_new(coroutine_func_f, my_context_new(name));
-	}
-	/* Wait for all the coroutines to end. */
-	struct coro *c;
-	while ((c = coro_sched_wait()) != NULL) {
-		/*
-		 * Each 'wait' returns a finished coroutine with which you can
-		 * do anything you want. Like check its exit status, for
-		 * example. Don't forget to free the coroutine afterwards.
-		 */
-		printf("Finished %d\n", coro_status(c));
-		coro_delete(c);
-	}
-	/* All coroutines have finished. */
+int main(int argc, char **argv) {
+  /* Initialize our coroutine global cooperative scheduler. */
+  coro_sched_init();
 
-	/* IMPLEMENT MERGING OF THE SORTED ARRAYS HERE. */
+  int num_of_files = argc - 2;
+  int files_offset = 2;
+  int msec_time_slice = atoi(argv[1]) / num_of_files;
 
-	return 0;
+  /* Initialize memory for arrays and start several coroutines which will process memory */
+  struct IntArray **arrays = malloc(sizeof(struct IntArray) * (argc - 1));
+  for (int i = 0; i < num_of_files; ++i) {
+    struct IntArray *array = malloc(sizeof(struct IntArray));
+    coro_new(coroutine_func_f, my_context_new(argv[i + files_offset], array), msec_time_slice);
+    arrays[i] = array;
+  }
+
+  /* Wait for all the coroutines to end. */
+  struct coro *c;
+  while ((c = coro_sched_wait()) != NULL) {
+    coro_delete(c);
+  }
+
+  int *res_arr = malloc(0);
+  int res_len = 0;
+  for (int i = 0; i < num_of_files; ++i) {
+    int *temp_dst = malloc((res_len + arrays[i]->length) * sizeof(int));
+
+    merge(res_arr, arrays[i]->data, res_len, arrays[i]->length, sizeof(int), int_gt_comparator, temp_dst);
+    free(arrays[i]->data);
+    res_len += arrays[i]->length;
+    free(arrays[i]);
+    free(res_arr);
+    res_arr = temp_dst;
+  }
+
+  if (write_integers_to_file(res_arr, res_len) != 0) {
+    printf("Error writing to file");
+    return 1;
+  }
+
+  free(res_arr);
+  free(arrays);
+
+  return 0;
 }

@@ -6,8 +6,7 @@ struct coro;
 typedef int (*coro_f)(void *);
 
 /** Make current context scheduler. */
-void
-coro_sched_init(void);
+void coro_sched_init(void);
 
 /**
  * Block until any coroutine has finished. It is returned. NULl,
@@ -25,23 +24,20 @@ coro_this(void);
  * scheduler.
  */
 struct coro *
-coro_new(coro_f func, void *func_arg);
+coro_new(coro_f func, void *func_arg, int quant_time);
 
 /** Return status of the coroutine. */
-int
-coro_status(const struct coro *c);
+int coro_status(const struct coro *c);
 
 long long
 coro_switch_count(const struct coro *c);
 
 /** Check if the coroutine has finished. */
-bool
-coro_is_finished(const struct coro *c);
+bool coro_is_finished(const struct coro *c);
 
 /** Free coroutine stack and it itself. */
-void
-coro_delete(struct coro *c);
+void coro_delete(struct coro *c);
 
 /** Switch to another not finished coroutine. */
-void
-coro_yield(void);
+void coro_yield(void);
+void yield_if_period_end();
