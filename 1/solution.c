@@ -134,6 +134,10 @@ int main(int argc, char **argv) {
   /* Initialize our coroutine global cooperative scheduler. */
   coro_sched_init();
 
+  struct timespec t_time;
+  clock_gettime(CLOCK_MONOTONIC, &t_time);
+  long long start_time = (t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000);
+
   int num_of_files = argc - 2;
   int files_offset = 2;
   int msec_time_slice = atoi(argv[1]) / num_of_files;
@@ -149,6 +153,10 @@ int main(int argc, char **argv) {
   /* Wait for all the coroutines to end. */
   struct coro *c;
   while ((c = coro_sched_wait()) != NULL) {
+    printf("Finished with status: %d, switched count: %lld, worked: %lldus\n",
+           coro_status(c),
+           coro_switch_count(c),
+           coro_total_time_working(c));
     coro_delete(c);
   }
 
@@ -172,6 +180,10 @@ int main(int argc, char **argv) {
 
   free(res_arr);
   free(arrays);
+
+  clock_gettime(CLOCK_MONOTONIC, &t_time);
+  long long total_program_worked = (t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000) - start_time;
+  printf("Program worked: %lldus\n", total_program_worked);
 
   return 0;
 }

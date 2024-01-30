@@ -34,7 +34,8 @@ struct coro {
   //
   long long left_timeperiod;
   long long full_timeperiod;
-  long long started_at;
+  long long last_checked_at;
+  long long total_time_working;
   //
   // ADDED BY STUDENT
 };
@@ -45,15 +46,18 @@ void yield_if_period_end() {
 
   struct coro *this = coro_this();
 
-  long long coro_worked = (t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000) - this->started_at;
+  long long current_ts = (t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000);
+
+  long long coro_worked = current_ts - this->last_checked_at;
+  this->last_checked_at = current_ts;
+
+  this->total_time_working += coro_worked;
   this->left_timeperiod = this->left_timeperiod - coro_worked;
   if (this->left_timeperiod < 0) {
     this->left_timeperiod = this->full_timeperiod;
     coro_yield();
     return;
   }
-
-  // printf("not yielding coro, (t_time.tv_nsec / 1000): %ld, coro_worked %lld, remains %lld\n", (t_time.tv_nsec / 1000), coro_worked, this->left_timeperiod);
 }
 
 /**
@@ -107,6 +111,10 @@ long long
 coro_switch_count(const struct coro *c) {
   return c->switch_count;
 }
+long long
+coro_total_time_working(const struct coro *c) {
+  return c->total_time_working;
+}
 
 bool coro_is_finished(const struct coro *c) {
   return c->is_finished;
@@ -127,7 +135,7 @@ coro_yield_to(struct coro *to) {
   //
   struct timespec t_time;
   clock_gettime(CLOCK_MONOTONIC, &t_time);
-  to->started_at = t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000;
+  to->last_checked_at = t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000;
   //
   // ADDED BY STUDENT
 
@@ -217,6 +225,7 @@ coro_new(coro_f func, void *func_arg, int quant_time) {
   c->switch_count = 0;
   c->left_timeperiod = quant_time;
   c->full_timeperiod = quant_time;
+  c->total_time_working = 0;
 
   /*
    * SIGUSR2 is used. First of all, block new signals to be

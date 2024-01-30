@@ -40,4 +40,8 @@ void coro_delete(struct coro *c);
 
 /** Switch to another not finished coroutine. */
 void coro_yield(void);
+
 void yield_if_period_end();
+
+long long
+coro_total_time_working(const struct coro *c);
