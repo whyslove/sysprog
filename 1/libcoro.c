@@ -203,6 +203,17 @@ coro_body(int signum) {
   coro_this_ptr = c;
   c->ret = c->func(c->func_arg);
   c->is_finished = true;
+
+  // CALCULATE TIME
+  struct timespec t_time;
+  clock_gettime(CLOCK_MONOTONIC, &t_time);
+  long long current_ts = (t_time.tv_sec * 1000000 + t_time.tv_nsec / 1000);
+  long long coro_worked = current_ts - c->last_checked_at;
+
+  c->total_time_working += coro_worked;
+  c->last_checked_at = current_ts;
+  // CALCULATE TIME
+
   /* Can not return - 'ret' address is invalid already! */
   if (!is_sched_waiting) {
     printf("Critical error - no place to return!\n");
