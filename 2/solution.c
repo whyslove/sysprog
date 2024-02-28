@@ -55,16 +55,26 @@ static int execute_command_line(const struct command_line *line) {
         pipe(pipe_fd);
       }
 
-      if (!strcmp(e->cmd.exe, "exit") && !e->next && line->head == e) {
-        if (e->cmd.arg_count == 0) {
-          // return 0;
-          exit(0);
-          // last_status = 0;
-        } else {
-          // return atoi(e->cmd.args[0]);
-          exit(atoi(e->cmd.args[0]));
+      if (!strcmp(e->cmd.exe, "exit") && !e->next) {
+        for (int i = 0; i < proc_to_wait; ++i) {
+          int stat;
+          int waited_pid = wait(&stat);
+          if (waited_pid == last_pid) {
+            last_status = WEXITSTATUS(stat);
+          }
         }
 
+        if (e->cmd.arg_count == 0) {
+          last_status = 0;
+        } else {
+          last_status = atoi(e->cmd.args[0]);
+        }
+
+        if (e == line->head) {
+          exit(last_status);
+        }
+
+        return last_status;
       } else if (!strcmp(e->cmd.exe, "cd")) {
         execute_cd(e);
       } else {
@@ -134,6 +144,7 @@ static int execute_command_line(const struct command_line *line) {
 }
 
 int main(void) {
+  setvbuf(stdout, NULL, _IONBF, 0);
   int last_status = 0;
   const size_t buf_size = 1024;
   char buf[buf_size];
