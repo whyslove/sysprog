@@ -111,12 +111,6 @@ struct file *file_find(const char *filename) {
       return file;
     }
 
-    if (!strcmp(file->name, "file5")) {
-      // printf("INVALID READ?\n");
-      file = file->prev;
-      // printf("INVALID READ!\n");
-      // exit(1);
-    }
     // printf("INVALID READ?\n");
     file = file->prev;
     // printf("INVALID READ!\n");
