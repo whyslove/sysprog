@@ -26,6 +26,13 @@ enum {
 	TPOOL_MAX_TASKS = 100000,
 };
 
+enum thread_statuses {
+	NOT_SCHEDULED = 0,
+	SCHEDULED,
+	RUNNING,
+	JOINED,
+};
+
 enum thread_poool_errcode {
 	TPOOL_ERR_INVALID_ARGUMENT = 1,
 	TPOOL_ERR_TOO_MANY_TASKS,
