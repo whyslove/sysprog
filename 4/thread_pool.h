@@ -23,7 +23,7 @@ typedef void *(*thread_task_f)(void *);
 
 enum {
 	TPOOL_MAX_THREADS = 20,
-	TPOOL_MAX_TASKS = 100000,
+	TPOOL_MAX_TASKS = 1001,
 };
 
 enum thread_statuses {
