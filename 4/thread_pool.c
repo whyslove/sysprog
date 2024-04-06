@@ -54,6 +54,7 @@ void *enclose_thread_task(void *arg) {
 	task->pool->threads_count--;
 	pthread_cond_broadcast(&task->pool->cond);
 	pthread_mutex_unlock(&task->pool->mutex);
+	pthread_mutex_unlock(&task->mutex);
 
 	free(args_enclosed);
 	return result;
@@ -72,6 +73,9 @@ void* queue_loop_consumer(void* arg) {
 			}
 			pthread_cond_wait(&pool->cond, &pool->mutex);
 		}
+		printf("Running threads %d, Queue len: %d\n", pool->threads_count, pool->queue_len);
+		printf("BEFORE IS QUEUE NULL %d\n", (int)(pool->queue == NULL));
+		printf("BEFORE IS TASK NULL %d\n", (int)(pool->queue->task == NULL));
 
 		if (pool->threads_count == pool->threads_created && pool->threads_count != pool->max_threads)
 			pool->threads_created++;
@@ -85,7 +89,10 @@ void* queue_loop_consumer(void* arg) {
 
 		struct thread_args_enclosed* args_enclosed = malloc(sizeof(struct thread_args_enclosed));
 		struct queue_node *to_free = pool->queue;
+		printf("IS QUEUE NULL %d\n", (int)(pool->queue == NULL));
+		printf("IS TASK NULL %d\n", (int)(pool->queue->task == NULL));
 		struct thread_task *task = pool->queue->task;
+		pthread_mutex_lock(&task->mutex);
 		args_enclosed->task = task;
 		pool->queue = pool->queue->next;
 		pool->queue_len--;
@@ -152,6 +159,7 @@ thread_pool_delete(struct thread_pool *pool)
 		}
 		pthread_mutex_unlock(&pool->mutex);
 
+		printf("DELETING POOL\n");
 		free(pool->threads);
 		free(pool->reserved);
 		free(pool);
@@ -159,8 +167,8 @@ thread_pool_delete(struct thread_pool *pool)
 	}
 
 
-	// pthread_mutex_destroy(&(pool->mutex));
-	// pthread_cond_destroy(&(pool->cond));
+	pthread_mutex_destroy(&(pool->mutex));
+	pthread_cond_destroy(&(pool->cond));
 
 	return 123124;	
 }
@@ -186,6 +194,7 @@ thread_pool_push_task(struct thread_pool *pool, struct thread_task *task)
 		pool->queue_len++;
 	}
 
+	node->next = NULL;
 	node->task = task;
 	task->status = SCHEDULED;
 	task->pool = pool;
