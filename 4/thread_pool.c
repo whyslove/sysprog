@@ -13,6 +13,7 @@ struct thread_task {
 	struct thread_pool *pool;
 	int thread_number;
 	pthread_t thread;
+	pthread_mutex_t mutex;
 };
 
 struct queue_node {
@@ -205,6 +206,7 @@ thread_task_new(struct thread_task **task, thread_task_f function, void *arg)
 	(*task)->status = NOT_SCHEDULED;
 	(*task)->function = function;
     (*task)->arg = arg;
+	pthread_mutex_init(&(*task)->mutex, NULL);
 
 	return 0;
 }
@@ -259,10 +261,13 @@ thread_task_timed_join(struct thread_task *task, double timeout, void **result)
 int
 thread_task_delete(struct thread_task *task)
 {
+	pthread_mutex_lock(&task->mutex);
 	if (task->status == JOINED || task->status == NOT_SCHEDULED) {
+		pthread_mutex_unlock(&task->mutex);
 		free(task);
 		return 0;
 	}
+	pthread_mutex_unlock(&task->mutex);
 	return TPOOL_ERR_TASK_IN_POOL;
 }
 
