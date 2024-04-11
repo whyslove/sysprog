@@ -31,6 +31,7 @@ struct thread_pool
     int threads_created;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
+    pthread_cond_t task_cond;
     struct queue_node *queue;
     struct queue_node *queue_tail;
     int queue_len;
@@ -72,18 +73,26 @@ void *queue_loop_consumer(void *arg)
         pthread_mutex_unlock(&pool->mutex);
 
         pthread_mutex_lock(&task->mutex);
+        // printf("running: %p\n", task);
         task->status = RUNNING;
         void *res = task->function(task->arg);
         task->res = res;
-        task->status = JOINED;
+        pthread_mutex_unlock(&task->mutex);
+
+        // printf("finished: %p\n", task);
 
         pthread_mutex_lock(&pool->mutex);
-        pool->threads_count--;
+        // printf("cannot take pool lock: %p\n", task);
+        pool->threads_count = pool->threads_count - 1;
         pthread_mutex_unlock(&pool->mutex);
-
+        pthread_mutex_lock(&task->mutex);
+        // printf("cannot take task mutex: %p\n", task);
+        task->status = JOINED;
         pthread_mutex_unlock(&task->mutex);
 
         pthread_cond_broadcast(&pool->cond);
+        pthread_cond_broadcast(&pool->task_cond);
+        // printf("trully finished: %p\n", task);
         free(to_free);
     }
 }
@@ -108,6 +117,7 @@ int thread_pool_new(int max_thread_count, struct thread_pool **pool)
     (*pool)->base_thread_ended = false;
     (*pool)->num_finished_threads = 0;
     pthread_cond_init(&((*pool)->cond), NULL);
+    pthread_cond_init(&((*pool)->task_cond), NULL);
     pthread_mutex_init(&((*pool)->mutex), NULL);
 
     return 0;
@@ -120,10 +130,14 @@ int thread_pool_thread_count(const struct thread_pool *pool)
 
 int thread_pool_delete(struct thread_pool *pool)
 {
-    if (pool->queue != NULL || pool->threads_count != 0)
-        return TPOOL_ERR_HAS_TASKS;
-
     pthread_mutex_lock(&pool->mutex);
+    if (pool->queue != NULL || pool->threads_count != 0)
+    {
+        printf("%d %d", pool->queue != NULL, pool->threads_count != 0);
+        pthread_mutex_unlock(&pool->mutex);
+        return TPOOL_ERR_HAS_TASKS;
+    }
+
     pool->want_end = true;
     pthread_cond_broadcast(&pool->cond);
     while (pool->num_finished_threads != pool->threads_created)
@@ -150,6 +164,7 @@ int thread_pool_push_task(struct thread_pool *pool, struct thread_task *task)
 
     pthread_mutex_lock(&task->mutex);
     // printf("pushed task %lld\n", (long long int)task);
+    // printf("pushing %p\n", task);
 
     struct queue_node *node = malloc(sizeof(struct queue_node));
     task->pool = pool;
@@ -219,12 +234,14 @@ int thread_task_join(struct thread_task *task, void **result)
     {
         return TPOOL_ERR_TASK_NOT_PUSHED;
     }
+    // printf("joining %p\n", task);
     pthread_mutex_lock(&task->mutex);
     while (task->status != JOINED)
     {
-        pthread_cond_wait(&task->pool->cond, &task->mutex);
+        pthread_cond_wait(&task->pool->task_cond, &task->mutex);
     }
     *result = task->res;
+    task->status = JOINED_BY_USER;
     pthread_mutex_unlock(&task->mutex);
 
     return 0;
@@ -246,7 +263,7 @@ int thread_task_timed_join(struct thread_task *task, double timeout, void **resu
 int thread_task_delete(struct thread_task *task)
 {
     pthread_mutex_lock(&task->mutex);
-    if (task->status == JOINED || task->status == NOT_SCHEDULED)
+    if (task->status == JOINED_BY_USER || task->status == NOT_SCHEDULED)
     {
         pthread_mutex_unlock(&task->mutex);
         // printf("freed %lld\n", (long long int)task);
