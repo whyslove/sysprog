@@ -12,7 +12,6 @@ struct thread_task
     void *res;
     int status;
     struct thread_pool *pool;
-    pthread_t thread;
     pthread_mutex_t mutex;
 };
 
